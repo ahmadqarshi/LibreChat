@@ -7,6 +7,7 @@ const {
   getMessages,
   updateMessage,
   deleteMessages,
+  getConvo,
 } = require('~/models');
 const { findAllArtifacts, replaceArtifactContent } = require('~/server/services/Artifacts/update');
 const { requireJwtAuth, validateMessageReq } = require('~/server/middleware');
@@ -18,6 +19,75 @@ const { logger } = require('~/config');
 
 const router = express.Router();
 router.use(requireJwtAuth);
+
+/**
+ * @route GET /api/messages/aggregateTokenUsage/my
+ * @desc Get aggregated tokenCount for a logged-in user
+ * @access Private
+ */
+router.get('/aggregateTokenUsage/my', async (req, res) => {
+  try {
+    const user = req.user.id ?? '';
+    const { conversationId } = req.query;
+
+    // Build the filter based on whether conversationId is provided
+    const filter = { user };
+    if (conversationId) {
+      // Check if the conversation exists and belongs to the user
+      const conversation = await getConvo(user, conversationId);
+      if (!conversation) {
+        return res.status(404).json({ error: 'Conversation not found' });
+      }
+      filter.conversationId = conversationId;
+    }
+
+    // Aggregate the tokenCount
+    const result = await Message.aggregate([
+      { $match: filter },
+      { $group: { _id: null, totalTokens: { $sum: '$tokenCount' } } },
+    ]);
+
+    // Extract the total tokens from the result
+    const totalTokens = result.length > 0 ? result[0].totalTokens : 0;
+
+    res.status(200).json({ totalTokens });
+  } catch (error) {
+    logger.error('Error aggregating token usage:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * @route GET /api/messages/aggregateTokenUsage/:userId
+ * @desc Get aggregated tokenCount for a specific user
+ * @access Private (Admin only)
+ */
+router.get('/aggregateTokenUsage/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { conversationId } = req.query;
+
+    // Build the filter based on whether conversationId is provided
+    const filter = { user: userId };
+    if (conversationId) {
+      filter.conversationId = conversationId;
+    }
+
+    // Aggregate the tokenCount
+    const result = await Message.aggregate([
+      { $match: filter },
+      { $group: { _id: null, totalTokens: { $sum: '$tokenCount' } } },
+    ]);
+
+    // Extract the total tokens from the result
+    const totalTokens = result.length > 0 ? result[0].totalTokens : 0;
+
+    res.status(200).json({ totalTokens });
+  } catch (error) {
+    logger.error('Error aggregating token usage by user ID:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 router.get('/', async (req, res) => {
   try {

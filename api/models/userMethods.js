@@ -61,8 +61,31 @@ const updateUser = async function (userId, updateData) {
  */
 const createUser = async (data, disableTTL = true, returnUser = false) => {
   const balance = await getBalanceConfig();
+  
+  // Explicitly construct the user data object
   const userData = {
-    ...data,
+    name: data.name,
+    username: data.username || '',
+    email: data.email,
+    emailVerified: data.emailVerified,
+    password: data.password,
+    avatar: data.avatar,
+    provider: data.provider,
+    role: data.role,
+    googleId: data.googleId,
+    facebookId: data.facebookId,
+    openidId: data.openidId,
+    ldapId: data.ldapId,
+    githubId: data.githubId,
+    discordId: data.discordId,
+    appleId: data.appleId,
+    externalUserId: data.externalUserId,
+    plugins: data.plugins || [],
+    twoFactorEnabled: data.twoFactorEnabled || false,
+    totpSecret: data.totpSecret,
+    backupCodes: data.backupCodes || [],
+    refreshToken: data.refreshToken || [],
+    termsAccepted: data.termsAccepted || false,
     expiresAt: disableTTL ? null : new Date(Date.now() + 604800 * 1000), // 1 week in milliseconds
   };
 
@@ -70,6 +93,7 @@ const createUser = async (data, disableTTL = true, returnUser = false) => {
     delete userData.expiresAt;
   }
 
+  console.log('Creating user with data:', JSON.stringify(userData, null, 2));
   const user = await User.create(userData);
 
   // If balance is enabled, create or update a balance record for the user using global.interfaceConfig.balance

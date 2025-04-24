@@ -2,6 +2,11 @@ const { getConvo } = require('~/models');
 
 // Middleware to validate conversationId and user relationship
 const validateMessageReq = async (req, res, next) => {
+  // Skip validation for aggregateTokenUsage endpoints
+  if (req.path.includes('/aggregateTokenUsage/')) {
+    return next();
+  }
+
   let conversationId = req.params.conversationId || req.body.conversationId;
 
   if (conversationId === 'new') {

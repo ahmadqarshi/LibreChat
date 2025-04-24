@@ -10,6 +10,8 @@ const requireLocalAuth = require('./requireLocalAuth');
 const canDeleteAccount = require('./canDeleteAccount');
 const setBalanceConfig = require('./setBalanceConfig');
 const requireLdapAuth = require('./requireLdapAuth');
+const checkUserInAD = require('./checkUserInAD');
+const externalAuthMiddleware = require('./externalAuth');
 const abortMiddleware = require('./abortMiddleware');
 const checkInviteUser = require('./checkInviteUser');
 const requireJwtAuth = require('./requireJwtAuth');
@@ -39,6 +41,7 @@ module.exports = {
   requireJwtAuth,
   checkInviteUser,
   requireLdapAuth,
+  checkUserInAD,
   requireLocalAuth,
   canDeleteAccount,
   validateEndpoint,

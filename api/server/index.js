@@ -20,6 +20,7 @@ const configureSocialLogins = require('./socialLogins');
 const AppService = require('./services/AppService');
 const staticCache = require('./utils/staticCache');
 const noIndex = require('./middleware/noIndex');
+const externalAuthMiddleware = require('./middleware/externalAuth');
 const routes = require('./routes');
 
 const { PORT, HOST, ALLOW_SOCIAL_LOGIN, DISABLE_COMPRESSION, TRUST_PROXY } = process.env ?? {};
@@ -67,6 +68,13 @@ const startServer = async () => {
       'Social logins are disabled. Set Environment Variable "ALLOW_SOCIAL_LOGIN" to true to enable them.',
     );
   }
+
+      // Add the middleware before the routes
+      logger.info('############################################################################################################ Checking ALLOW_EXTERNAL_AUTH');
+      if (process.env.ALLOW_EXTERNAL_AUTH === 'true') {
+        logger.info('#################################ALLOW_EXTERNAL_AUTH is true');
+        app.use(externalAuthMiddleware );
+      }
 
   /* OAUTH */
   app.use(passport.initialize());

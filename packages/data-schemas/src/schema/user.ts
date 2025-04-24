@@ -17,6 +17,7 @@ export interface IUser extends Document {
   githubId?: string;
   discordId?: string;
   appleId?: string;
+  externalUserId?: string;
   plugins?: unknown[];
   twoFactorEnabled?: boolean;
   totpSecret?: string;
@@ -128,6 +129,11 @@ const User = new Schema<IUser>(
       sparse: true,
     },
     appleId: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
+    externalUserId: {
       type: String,
       unique: true,
       sparse: true,

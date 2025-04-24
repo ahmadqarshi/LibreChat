@@ -23,6 +23,7 @@ const {
   checkInviteUser,
   registerLimiter,
   requireLdapAuth,
+  checkUserInAD,
   setBalanceConfig,
   requireLocalAuth,
   resetPasswordLimiter,
@@ -40,7 +41,7 @@ router.post(
   logHeaders,
   loginLimiter,
   checkBan,
-  ldapAuth ? requireLdapAuth : requireLocalAuth,
+  ldapAuth ? checkUserInAD : requireLocalAuth,
   setBalanceConfig,
   loginController,
 );
