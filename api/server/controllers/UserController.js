@@ -25,10 +25,11 @@ const getUserController = async (req, res) => {
   /** @type {MongoUser} */
   const userData = req.user.toObject != null ? req.user.toObject() : { ...req.user };
   delete userData.totpSecret;
+  const token = res.headers.authorization?.split(' ')[1];
   if (req.app.locals.fileStrategy === FileSources.s3 && userData.avatar) {
     const avatarNeedsRefresh = needsRefresh(userData.avatar, 3600);
     if (!avatarNeedsRefresh) {
-      return res.status(200).send(userData);
+      return res.status(200).send({ ...userData, token }); //bad practice but the customer wanted this.
     }
     const originalAvatar = userData.avatar;
     try {
@@ -39,7 +40,8 @@ const getUserController = async (req, res) => {
       logger.error('Error getting new S3 URL for avatar:', error);
     }
   }
-  res.status(200).send(userData);
+
+  res.status(200).send({ ...userData, token }); //bad practice but the customer wanted this.
 };
 
 const getTermsStatusController = async (req, res) => {
