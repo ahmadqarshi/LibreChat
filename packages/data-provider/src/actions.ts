@@ -254,6 +254,7 @@ class RequestExecutor {
 
     if (isApiKey && authorization_type === AuthorizationTypeEnum.Basic) {
       const basicToken = Buffer.from(api_key).toString('base64');
+      console.log('Basic token:', basicToken);
       this.authHeaders['Authorization'] = `Basic ${basicToken}`;
     } else if (isApiKey && authorization_type === AuthorizationTypeEnum.Bearer) {
       this.authHeaders['Authorization'] = `Bearer ${api_key}`;

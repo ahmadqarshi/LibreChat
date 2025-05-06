@@ -9,6 +9,7 @@ import {
   bookmarkPermissionsSchema,
   multiConvoPermissionsSchema,
   temporaryChatPermissionsSchema,
+  analyticsPermissionsSchema,
 } from './permissions';
 
 /**
@@ -45,6 +46,9 @@ const defaultRolesSchema = z.object({
         // [Permissions.SHARE]: z.boolean().default(true),
       }),
       [PermissionTypes.BOOKMARKS]: bookmarkPermissionsSchema.extend({
+        [Permissions.USE]: z.boolean().default(true),
+      }),
+      [PermissionTypes.ANALYTICS]: analyticsPermissionsSchema.extend({
         [Permissions.USE]: z.boolean().default(true),
       }),
       [PermissionTypes.AGENTS]: agentPermissionsSchema.extend({
@@ -96,6 +100,9 @@ export const roleDefaults = defaultRolesSchema.parse({
       [PermissionTypes.RUN_CODE]: {
         [Permissions.USE]: true,
       },
+      [PermissionTypes.ANALYTICS]: {
+        [Permissions.USE]: true,
+      },
     },
   },
   [SystemRoles.USER]: {
@@ -107,6 +114,7 @@ export const roleDefaults = defaultRolesSchema.parse({
       [PermissionTypes.MULTI_CONVO]: {},
       [PermissionTypes.TEMPORARY_CHAT]: {},
       [PermissionTypes.RUN_CODE]: {},
+      [PermissionTypes.ANALYTICS]: {},
     },
   },
 });

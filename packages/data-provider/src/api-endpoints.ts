@@ -23,11 +23,48 @@ const buildQuery = (params: Record<string, unknown>): string => {
 export const health = () => '/health';
 export const user = () => '/api/user';
 
+
 export const balance = () => '/api/balance';
 
 export const userPlugins = () => '/api/user/plugins';
 
 export const deleteUser = () => '/api/user/delete';
+// endpoints.ts
+export const analytics = (params?: Record<string, string | number>) => {
+  if (!params) {
+    return '/api/analytics';
+  }
+
+  const queryParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null) {
+      queryParams.append(key, value.toString());
+    }
+  }
+
+  return `/api/analytics?${queryParams.toString()}`;
+};
+export const downloadCSV = (params: Record<string, string | number>) => {
+  const queryParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null) {
+      queryParams.append(key, value.toString());
+    }
+  }
+
+  return `/api/analytics/download-csv?${queryParams.toString()}`;
+}
+
+export const downloadExcel = (params: Record<string, string | number>) => {
+  const queryParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null) {
+      queryParams.append(key, value.toString());
+    }
+  }
+
+  return `/api/analytics/download-excel?${queryParams.toString()}`;
+}
 
 export const messages = (params: q.MessagesListParams) => {
   const { conversationId, messageId, ...rest } = params;
@@ -114,6 +151,8 @@ export const tokenizer = () => '/api/tokenizer';
 export const login = () => '/api/auth/login';
 
 export const logout = () => '/api/auth/logout';
+
+export const getAnalytics = () => '/api/analytics';
 
 export const register = () => '/api/auth/register';
 

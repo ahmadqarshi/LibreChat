@@ -9,6 +9,8 @@ import * as config from './config';
 import request from './request';
 import * as s from './schemas';
 import * as r from './roles';
+import axios from 'axios';
+
 
 export function abortRequestWithMessage(
   endpoint: string,
@@ -93,6 +95,108 @@ export function getUser(): Promise<t.TUser> {
   return request.get(endpoints.user());
 }
 
+export function getAnalytics(params?: Record<string, string | number>): Promise<Response> {
+  const queryParams = new URLSearchParams();
+
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== null) {
+        queryParams.append(key, value.toString());
+      }
+    }
+  }
+
+  const url = `/api/analytics${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+  return request.get(url);
+}
+
+export async function getDownloadCSV(params: Record<string, string | number>) {
+  try {
+    console.log('getDownloadCSV', params);
+
+    const queryParams = new URLSearchParams({
+      ...(params.username && { username: params.username.toString() }),
+      ...(params.fromDate && { fromDate: params.fromDate.toString() }),
+      ...(params.toDate && { toDate: params.toDate.toString() }),
+    });
+
+    const url = `/api/analytics/download-csv${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+    console.log('getDownloadCSV url', url);
+
+    const response:any = await axios.get(url, {
+      responseType: 'blob',
+      headers: {
+        Accept: 'text/csv',
+      },
+    });
+    console.log('getDownloadCSV response', response);
+
+    const blob = response.data;
+    if (!blob) {
+      throw new Error('No data received from the server');
+    }
+    console.log('blob', blob);
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = 'token-statistics.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(downloadUrl);
+
+    console.log('CSV download initiated');
+  } catch (error) {
+    console.error('Error downloading CSV:', error);
+    // Optionally, handle error (e.g., setError('Failed to download CSV. Please try again.');)
+  }
+}
+
+export async function getDownloadExcel(params: Record<string, string | number>) {
+  try {
+    console.log('getDownloadExcel', params);
+
+    const queryParams = new URLSearchParams({
+      ...(params.username && { username: params.username.toString() }),
+      ...(params.fromDate && { fromDate: params.fromDate.toString() }),
+      ...(params.toDate && { toDate: params.toDate.toString() }),
+    });
+
+    const url = `/api/analytics/download-excel${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+    console.log('getDownloadExcel url', url);
+
+    const response:any = await axios.get(url, {
+      responseType: 'blob',
+      headers: {
+        Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      },
+    });
+
+
+    if (!response.data) {
+      throw new Error('No data received from the server');
+    }
+
+    const blob = response.data;
+    if (!blob) {
+      throw new Error('No data received from the server');
+    }
+    console.log('blob', blob);
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = 'token-statistics.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(downloadUrl);
+
+    console.log('Excel download initiated');
+  } catch (error) {
+    console.error('Error downloading Excel:', error);
+    // Optionally, handle error (e.g., setError('Failed to download Excel. Please try again.');)
+  }
+}
 export function getUserBalance(): Promise<string> {
   return request.get(endpoints.balance());
 }
@@ -102,6 +206,7 @@ export const updateTokenCount = (text: string) => {
 };
 
 export const login = (payload: t.TLoginUser): Promise<t.TLoginResponse> => {
+  console.log('Login payload:', payload);
   return request.post(endpoints.login(), payload);
 };
 

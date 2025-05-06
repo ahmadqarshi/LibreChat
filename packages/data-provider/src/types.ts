@@ -130,6 +130,24 @@ export type TUser = {
   updatedAt: string;
 };
 
+// Represents an individual analytics entry
+export type TAnalytics = {
+  userName: string; // From the API response
+  totalTokens: number; // Equivalent to "tokens" in the original type
+  modelTokens: Record<string, number>; // Model-specific token counts (e.g., "o4-mini", "gpt-4.1-nano")
+};
+
+// Represents the full API response
+export type TAnalyticsResponse = {
+  data: TAnalytics[];
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    pages: number;
+  };
+};
+
 export type TGetConversationsResponse = {
   conversations: TConversation[];
   pageNumber: string;

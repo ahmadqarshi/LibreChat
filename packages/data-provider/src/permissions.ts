@@ -28,6 +28,10 @@ export enum PermissionTypes {
    * Type for using the "Run Code" LC Code Interpreter API feature
    */
   RUN_CODE = 'RUN_CODE',
+  /**
+   * Type for Analytics
+   */
+  ANALYTICS = 'ANALYTICS',
 }
 
 /**
@@ -54,7 +58,11 @@ export type TPromptPermissions = z.infer<typeof promptPermissionsSchema>;
 export const bookmarkPermissionsSchema = z.object({
   [Permissions.USE]: z.boolean().default(true),
 });
+export const analyticsPermissionsSchema = z.object({
+  [Permissions.USE]: z.boolean().default(true),
+});
 export type TBookmarkPermissions = z.infer<typeof bookmarkPermissionsSchema>;
+export type TAnalyticsPermissions = z.infer<typeof analyticsPermissionsSchema>;
 
 export const agentPermissionsSchema = z.object({
   [Permissions.SHARED_GLOBAL]: z.boolean().default(false),
@@ -87,4 +95,5 @@ export const permissionsSchema = z.object({
   [PermissionTypes.MULTI_CONVO]: multiConvoPermissionsSchema,
   [PermissionTypes.TEMPORARY_CHAT]: temporaryChatPermissionsSchema,
   [PermissionTypes.RUN_CODE]: runCodePermissionsSchema,
+  [PermissionTypes.ANALYTICS]: analyticsPermissionsSchema,
 });
