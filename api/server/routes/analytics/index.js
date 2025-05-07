@@ -8,7 +8,6 @@ const ExcelJS = require('exceljs');
 
 router.get('/', requireJwtAuth, checkAdmin, async (req, res) => {
     try {
-        console.log('Fetching token statistics...');
         const mongoose = await connectDb();
         const db = mongoose.connection.db;
         if (!db) {
@@ -51,7 +50,7 @@ router.get('/', requireJwtAuth, checkAdmin, async (req, res) => {
     }
 });
 
-router.get('/download-csv', requireJwtAuth, checkAdmin,  async (req, res) => {
+router.get('/download-csv', requireJwtAuth, checkAdmin, async (req, res) => {
     try {
         const mongoose = await connectDb();
         const db = mongoose.connection.db;
@@ -64,19 +63,48 @@ router.get('/download-csv', requireJwtAuth, checkAdmin,  async (req, res) => {
 
         const rawData = result.length > 0 && result[0].data ? result[0].data : [];
 
+        // Collect all agent IDs to fetch their names
         const allModels = new Set();
+        const agentIds = new Set();
+
         if (rawData.length > 0) {
             rawData.forEach(item => {
                 if (item.models && Array.isArray(item.models)) {
                     item.models.forEach(modelData => {
                         if (modelData.model) {
-                            allModels.add(modelData.model);
+                            const model = modelData.model;
+                            allModels.add(model);
+
+                            // Add to agentIds if it starts with 'agent_'
+                            if (model.startsWith('agent_')) {
+                                agentIds.add(model);
+                            }
                         }
                     });
                 }
             });
         }
-        const modelNames = Array.from(allModels).sort(); // Sort for consistent order
+
+        // Fetch agent names from the database
+        const agentMap = {};
+        if (agentIds.size > 0) {
+            const agents = await db.collection('agents').find({
+                id: { $in: Array.from(agentIds) }
+            }).toArray();
+
+            agents.forEach(agent => {
+                agentMap[agent.id] = agent.name || 'Unnamed Agent';
+            });
+        }
+
+        // Create the list of model names, replacing agent IDs with agent names
+        const modelNames = Array.from(allModels).map(model => {
+            if (model.startsWith('agent_') && agentMap[model]) {
+                return { id: model, displayName: agentMap[model] };
+            } else {
+                return { id: model, displayName: model };
+            }
+        }).sort((a, b) => a.displayName.localeCompare(b.displayName)); // Sort by display name
 
         const normalizedData = rawData.map(item => {
             const userData = {
@@ -84,14 +112,19 @@ router.get('/download-csv', requireJwtAuth, checkAdmin,  async (req, res) => {
                 totalTokens: item.totalTokens || 0
             };
 
+            // Initialize with zero for all models
             modelNames.forEach(model => {
-                userData[model] = 0;
+                userData[model.displayName] = 0;
             });
 
             if (item.models && Array.isArray(item.models)) {
                 item.models.forEach(modelData => {
                     if (modelData.model) {
-                        userData[modelData.model] = modelData.totalTokens || 0;
+                        const displayName = modelData.model.startsWith('agent_') && agentMap[modelData.model]
+                            ? agentMap[modelData.model]
+                            : modelData.model;
+
+                        userData[displayName] = modelData.totalTokens || 0;
                     }
                 });
             }
@@ -101,7 +134,7 @@ router.get('/download-csv', requireJwtAuth, checkAdmin,  async (req, res) => {
 
         const fields = [
             { label: 'User Name', value: 'userName' },
-            ...modelNames.map(model => ({ label: model, value: model })),
+            ...modelNames.map(model => ({ label: model.displayName, value: model.displayName })),
             { label: 'Total Tokens', value: 'totalTokens' }
         ];
 
@@ -192,14 +225,46 @@ router.get('/download-excel', requireJwtAuth, checkAdmin, async (req, res) => {
 
         const result = await db.collection('messages').aggregate(pipeline).toArray();
 
+        // Fetch agent information from the database
+        const agents = await db.collection('agents').find({}).toArray();
+        const agentMap = {};
+        agents.forEach(agent => {
+            // Use the id field as the key, not _id
+            if (agent.id) {
+                agentMap[agent.id] = agent;
+            }
+        });
+
         const formattedData = [];
         result.forEach(item => {
             const [name, username] = item._id.userName.split(' (');
+            const modelId = item._id.model;
+
+            // Check if this is an agent ID
+            let modelName = modelId;
+            let agentName = '';
+
+            // If the model starts with 'agent_', it's an agent
+            if (modelId && modelId.startsWith('agent_')) {
+                const agent = agentMap[modelId];
+
+                if (agent) {
+                    // If agent found, get the agent name and model
+                    agentName = agent.name || 'Unknown Agent';
+                    modelName = agent.model || '';
+                } else {
+                    // If agent not found, leave as is without changes
+                    agentName = '';
+                    modelName = modelId;
+                }
+            }
+
             formattedData.push({
                 name: name || 'Unknown',
                 username: username ? username.replace(')', '') : 'unknown',
                 date: item.earliestDate ? new Date(item.earliestDate).toLocaleDateString('en-GB') : 'Unknown', // DD/MM/YYYY
-                model: item._id.model,
+                model: modelName,
+                agent: agentName,
                 tokensUsed: item.totalTokens
             });
         });
@@ -212,6 +277,7 @@ router.get('/download-excel', requireJwtAuth, checkAdmin, async (req, res) => {
             { header: 'Username', key: 'username', width: 15 },
             { header: 'Date', key: 'date', width: 12 },
             { header: 'Model', key: 'model', width: 20 },
+            { header: 'Agent', key: 'agent', width: 20 },
             { header: 'Tokens Used', key: 'tokensUsed', width: 12 }
         ];
 
