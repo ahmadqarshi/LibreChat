@@ -1,4 +1,7 @@
 const { v4 } = require('uuid');
+const { sleep } = require('@librechat/agents');
+const { logger } = require('@librechat/data-schemas');
+const { sendEvent, getBalanceConfig } = require('@librechat/api');
 const {
   Time,
   Constants,
@@ -19,20 +22,20 @@ const {
   addThreadMetadata,
   saveAssistantMessage,
 } = require('~/server/services/Threads');
-const { sendResponse, sendMessage, sleep, countTokens } = require('~/server/utils');
 const { runAssistant, createOnTextProgress } = require('~/server/services/AssistantService');
 const validateAuthor = require('~/server/middleware/assistants/validateAuthor');
 const { formatMessage, createVisionPrompt } = require('~/app/clients/prompts');
 const { createRun, StreamRunManager } = require('~/server/services/Runs');
 const { addTitle } = require('~/server/services/Endpoints/assistants');
 const { createRunBody } = require('~/server/services/createRunBody');
+const { sendResponse } = require('~/server/middleware/error');
 const { getTransactions } = require('~/models/Transaction');
 const { checkBalance } = require('~/models/balanceMethods');
 const { getConvo } = require('~/models/Conversation');
 const getLogStores = require('~/cache/getLogStores');
+const { countTokens } = require('~/server/utils');
 const { getModelMaxTokens } = require('~/utils');
 const { getOpenAIClient } = require('./helpers');
-const { logger } = require('~/config');
 
 /**
  * @route POST /
@@ -44,6 +47,7 @@ const { logger } = require('~/config');
  * @returns {void}
  */
 const chatV1 = async (req, res) => {
+  const appConfig = req.config;
   logger.debug('[/assistants/chat/] req.body', req.body);
 
   const {
@@ -119,7 +123,7 @@ const chatV1 = async (req, res) => {
     } else if (/Files.*are invalid/.test(error.message)) {
       const errorMessage = `Files are invalid, or may not have uploaded yet.${
         endpoint === EModelEndpoint.azureAssistants
-          ? ' If using Azure OpenAI, files are only available in the region of the assistant\'s model at the time of upload.'
+          ? " If using Azure OpenAI, files are only available in the region of the assistant's model at the time of upload."
           : ''
       }`;
       return sendResponse(req, res, messageData, errorMessage);
@@ -149,7 +153,7 @@ const chatV1 = async (req, res) => {
         return res.end();
       }
       await cache.delete(cacheKey);
-      const cancelledRun = await openai.beta.threads.runs.cancel(thread_id, run_id);
+      const cancelledRun = await openai.beta.threads.runs.cancel(run_id, { thread_id });
       logger.debug('[/assistants/chat/] Cancelled run:', cancelledRun);
     } catch (error) {
       logger.error('[/assistants/chat/] Error cancelling run', error);
@@ -159,7 +163,7 @@ const chatV1 = async (req, res) => {
 
     let run;
     try {
-      run = await openai.beta.threads.runs.retrieve(thread_id, run_id);
+      run = await openai.beta.threads.runs.retrieve(run_id, { thread_id });
       await recordUsage({
         ...run.usage,
         model: run.model,
@@ -248,8 +252,8 @@ const chatV1 = async (req, res) => {
     }
 
     const checkBalanceBeforeRun = async () => {
-      const balance = req.app?.locals?.balance;
-      if (!balance?.enabled) {
+      const balanceConfig = getBalanceConfig(appConfig);
+      if (!balanceConfig?.enabled) {
         return;
       }
       const transactions =
@@ -326,8 +330,15 @@ const chatV1 = async (req, res) => {
 
       file_ids = files.map(({ file_id }) => file_id);
       if (file_ids.length || thread_file_ids.length) {
-        userMessage.file_ids = file_ids;
         attachedFileIds = new Set([...file_ids, ...thread_file_ids]);
+        if (endpoint === EModelEndpoint.azureAssistants) {
+          userMessage.attachments = Array.from(attachedFileIds).map((file_id) => ({
+            file_id,
+            tools: [{ type: 'file_search' }],
+          }));
+        } else {
+          userMessage.file_ids = Array.from(attachedFileIds);
+        }
       }
     };
 
@@ -379,8 +390,8 @@ const chatV1 = async (req, res) => {
         body.additional_instructions ? `${body.additional_instructions}\n` : ''
       }The user has uploaded ${imageCount} image${pluralized}.
       Use the \`${ImageVisionTool.function.name}\` tool to retrieve ${
-  plural ? '' : 'a '
-}detailed text description${pluralized} for ${plural ? 'each' : 'the'} image${pluralized}.`;
+        plural ? '' : 'a '
+      }detailed text description${pluralized} for ${plural ? 'each' : 'the'} image${pluralized}.`;
 
       return files;
     };
@@ -464,7 +475,7 @@ const chatV1 = async (req, res) => {
     await Promise.all(promises);
 
     const sendInitialResponse = () => {
-      sendMessage(res, {
+      sendEvent(res, {
         sync: true,
         conversationId,
         // messages: previousMessages,
@@ -576,9 +587,11 @@ const chatV1 = async (req, res) => {
       thread_id,
       model: assistant_id,
       endpoint,
+      spec: endpointOption.spec,
+      iconURL: endpointOption.iconURL,
     };
 
-    sendMessage(res, {
+    sendEvent(res, {
       final: true,
       conversation,
       requestMessage: {
@@ -611,7 +624,7 @@ const chatV1 = async (req, res) => {
 
     if (!response.run.usage) {
       await sleep(3000);
-      completedRun = await openai.beta.threads.runs.retrieve(thread_id, response.run.id);
+      completedRun = await openai.beta.threads.runs.retrieve(response.run.id, { thread_id });
       if (completedRun.usage) {
         await recordUsage({
           ...completedRun.usage,

@@ -1,16 +1,12 @@
 const mongoose = require('mongoose');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const { spendTokens, spendStructuredTokens } = require('./spendTokens');
-const { getBalanceConfig } = require('~/server/services/Config');
-const { getMultiplier, getCacheMultiplier } = require('./tx');
-const { Transaction } = require('./Transaction');
-const Balance = require('./Balance');
 
-// Mock the custom config module so we can control the balance flag.
-jest.mock('~/server/services/Config');
+const { getMultiplier, getCacheMultiplier } = require('./tx');
+const { createTransaction } = require('./Transaction');
+const { Balance } = require('~/db/models');
 
 let mongoServer;
-
 beforeAll(async () => {
   mongoServer = await MongoMemoryServer.create();
   const mongoUri = mongoServer.getUri();
@@ -24,8 +20,6 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await mongoose.connection.dropDatabase();
-  // Default: enable balance updates in tests.
-  getBalanceConfig.mockResolvedValue({ enabled: true });
 });
 
 describe('Regular Token Spending Tests', () => {
@@ -42,6 +36,7 @@ describe('Regular Token Spending Tests', () => {
       model,
       context: 'test',
       endpointTokenConfig: null,
+      balance: { enabled: true },
     };
 
     const tokenUsage = {
@@ -75,6 +70,7 @@ describe('Regular Token Spending Tests', () => {
       model,
       context: 'test',
       endpointTokenConfig: null,
+      balance: { enabled: true },
     };
 
     const tokenUsage = {
@@ -105,6 +101,7 @@ describe('Regular Token Spending Tests', () => {
       model,
       context: 'test',
       endpointTokenConfig: null,
+      balance: { enabled: true },
     };
 
     const tokenUsage = {};
@@ -129,6 +126,7 @@ describe('Regular Token Spending Tests', () => {
       model,
       context: 'test',
       endpointTokenConfig: null,
+      balance: { enabled: true },
     };
 
     const tokenUsage = { promptTokens: 100 };
@@ -144,8 +142,7 @@ describe('Regular Token Spending Tests', () => {
   });
 
   test('spendTokens should not update balance when balance feature is disabled', async () => {
-    // Arrange: Override the config to disable balance updates.
-    getBalanceConfig.mockResolvedValue({ balance: { enabled: false } });
+    // Arrange: Balance config is now passed directly in txData
     const userId = new mongoose.Types.ObjectId();
     const initialBalance = 10000000;
     await Balance.create({ user: userId, tokenCredits: initialBalance });
@@ -157,6 +154,7 @@ describe('Regular Token Spending Tests', () => {
       model,
       context: 'test',
       endpointTokenConfig: null,
+      balance: { enabled: false },
     };
 
     const tokenUsage = {
@@ -187,6 +185,7 @@ describe('Structured Token Spending Tests', () => {
       model,
       context: 'message',
       endpointTokenConfig: null,
+      balance: { enabled: true },
     };
 
     const tokenUsage = {
@@ -240,6 +239,7 @@ describe('Structured Token Spending Tests', () => {
       conversationId: 'test-convo',
       model,
       context: 'message',
+      balance: { enabled: true },
     };
 
     const tokenUsage = {
@@ -272,6 +272,7 @@ describe('Structured Token Spending Tests', () => {
       conversationId: 'test-convo',
       model,
       context: 'message',
+      balance: { enabled: true },
     };
 
     const tokenUsage = {
@@ -303,6 +304,7 @@ describe('Structured Token Spending Tests', () => {
       conversationId: 'test-convo',
       model,
       context: 'message',
+      balance: { enabled: true },
     };
 
     const tokenUsage = {};
@@ -329,6 +331,7 @@ describe('Structured Token Spending Tests', () => {
       conversationId: 'test-convo',
       model,
       context: 'incomplete',
+      balance: { enabled: true },
     };
 
     const tokenUsage = {
@@ -365,10 +368,11 @@ describe('NaN Handling Tests', () => {
       endpointTokenConfig: null,
       rawAmount: NaN,
       tokenType: 'prompt',
+      balance: { enabled: true },
     };
 
     // Act
-    const result = await Transaction.create(txData);
+    const result = await createTransaction(txData);
 
     // Assert: No transaction should be created and balance remains unchanged.
     expect(result).toBeUndefined();

@@ -2,15 +2,16 @@ import {
   QueryKeys,
   dataService,
   EModelEndpoint,
+  isAgentsEndpoint,
   defaultOrderQuery,
   defaultAssistantsVersion,
 } from 'librechat-data-provider';
 import { useQuery, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import type {
-  InfiniteData,
   UseInfiniteQueryOptions,
   QueryObserverResult,
   UseQueryOptions,
+  InfiniteData,
 } from '@tanstack/react-query';
 import type t from 'librechat-data-provider';
 import type {
@@ -42,21 +43,6 @@ export const useGetPresetsQuery = (
     refetchOnMount: false,
     ...config,
   });
-};
-
-export const useGetEndpointsConfigOverride = <TData = unknown | boolean>(
-  config?: UseQueryOptions<unknown | boolean, unknown, TData>,
-): QueryObserverResult<TData> => {
-  return useQuery<unknown | boolean, unknown, TData>(
-    [QueryKeys.endpointsConfigOverride],
-    () => dataService.getEndpointsConfigOverride(),
-    {
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
-      refetchOnMount: false,
-      ...config,
-    },
-  );
 };
 
 export const useGetConvoIdQuery = (
@@ -203,7 +189,7 @@ export const useAvailableToolsQuery = <TData = t.TPlugin[]>(
   const keyExpiry = queryClient.getQueryData<TCheckUserKeyResponse>([QueryKeys.name, endpoint]);
   const userProvidesKey = !!endpointsConfig?.[endpoint]?.userProvide;
   const keyProvided = userProvidesKey ? !!keyExpiry?.expiresAt : true;
-  const enabled = !!endpointsConfig?.[endpoint] && keyProvided;
+  const enabled = isAgentsEndpoint(endpoint) ? true : !!endpointsConfig?.[endpoint] && keyProvided;
   const version: string | number | undefined =
     endpointsConfig?.[endpoint]?.version ?? defaultAssistantsVersion[endpoint];
   return useQuery<t.TPlugin[], unknown, TData>(

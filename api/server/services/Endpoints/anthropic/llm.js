@@ -1,4 +1,4 @@
-const { HttpsProxyAgent } = require('https-proxy-agent');
+const { ProxyAgent } = require('undici');
 const { anthropicSettings, removeNullishValues } = require('librechat-data-provider');
 const { checkPromptCacheSupport, getClaudeHeaders, configureReasoning } = require('./helpers');
 
@@ -15,6 +15,7 @@ const { checkPromptCacheSupport, getClaudeHeaders, configureReasoning } = requir
  * @param {number} [options.modelOptions.topK] - Controls the number of top tokens to consider.
  * @param {string[]} [options.modelOptions.stop] - Sequences where the API will stop generating further tokens.
  * @param {boolean} [options.modelOptions.stream] - Whether to stream the response.
+ * @param {string} options.userId - The user ID for tracking and personalization.
  * @param {string} [options.proxy] - Proxy server URL.
  * @param {string} [options.reverseProxyUrl] - URL for a reverse proxy, if used.
  *
@@ -47,6 +48,11 @@ function getLLMConfig(apiKey, options = {}) {
     maxTokens:
       mergedOptions.maxOutputTokens || anthropicSettings.maxOutputTokens.reset(mergedOptions.model),
     clientOptions: {},
+    invocationKwargs: {
+      metadata: {
+        user_id: options.userId,
+      },
+    },
   };
 
   requestOptions = configureReasoning(requestOptions, systemOptions);
@@ -67,14 +73,28 @@ function getLLMConfig(apiKey, options = {}) {
   }
 
   if (options.proxy) {
-    requestOptions.clientOptions.httpAgent = new HttpsProxyAgent(options.proxy);
+    const proxyAgent = new ProxyAgent(options.proxy);
+    requestOptions.clientOptions.fetchOptions = {
+      dispatcher: proxyAgent,
+    };
   }
 
   if (options.reverseProxyUrl) {
     requestOptions.clientOptions.baseURL = options.reverseProxyUrl;
+    requestOptions.anthropicApiUrl = options.reverseProxyUrl;
+  }
+
+  const tools = [];
+
+  if (mergedOptions.web_search) {
+    tools.push({
+      type: 'web_search_20250305',
+      name: 'web_search',
+    });
   }
 
   return {
+    tools,
     /** @type {AnthropicClientOptions} */
     llmConfig: removeNullishValues(requestOptions),
   };

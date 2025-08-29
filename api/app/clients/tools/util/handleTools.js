@@ -1,8 +1,9 @@
+const { logger } = require('@librechat/data-schemas');
 const { SerpAPI } = require('@langchain/community/tools/serpapi');
 const { Calculator } = require('@langchain/community/tools/calculator');
-const { createCodeExecutionTool, EnvVar } = require('@librechat/agents');
-const { Tools, Constants, EToolResources } = require('librechat-data-provider');
-const { getUserPluginAuthValue } = require('~/server/services/PluginService');
+const { mcpToolPattern, loadWebSearchAuth } = require('@librechat/api');
+const { EnvVar, createCodeExecutionTool, createSearchTool } = require('@librechat/agents');
+const { Tools, Constants, EToolResources, replaceSpecialVars } = require('librechat-data-provider');
 const {
   availableTools,
   manifestToolMap,
@@ -22,12 +23,10 @@ const {
 } = require('../');
 const { primeFiles: primeCodeFiles } = require('~/server/services/Files/Code/process');
 const { createFileSearchTool, primeFiles: primeSearchFiles } = require('./fileSearch');
+const { getUserPluginAuthValue } = require('~/server/services/PluginService');
+const { createMCPTool, createMCPTools } = require('~/server/services/MCP');
 const { loadAuthValues } = require('~/server/services/Tools/credentials');
-const { createMCPTool } = require('~/server/services/MCP');
-const { loadSpecs } = require('./loadSpecs');
-const { logger } = require('~/config');
-
-const mcpToolPattern = new RegExp(`^.+${Constants.mcp_delimiter}.+$`);
+const { getCachedTools } = require('~/server/services/Config');
 
 /**
  * Validates the availability and authentication of tools for a user based on environment variables or user-specific plugin authentication values.
@@ -88,7 +87,7 @@ const validateTools = async (user, tools = []) => {
     return Array.from(validToolsSet.values());
   } catch (err) {
     logger.error('[validateTools] There was a problem validating tools', err);
-    throw new Error('There was a problem validating tools');
+    throw new Error(err);
   }
 };
 
@@ -122,28 +121,37 @@ const getAuthFields = (toolKey) => {
 
 /**
  *
- * @param {object} object
- * @param {string} object.user
- * @param {Pick<Agent, 'id' | 'provider' | 'model'>} [object.agent]
- * @param {string} [object.model]
- * @param {EModelEndpoint} [object.endpoint]
- * @param {LoadToolOptions} [object.options]
- * @param {boolean} [object.useSpecs]
- * @param {Array<string>} object.tools
- * @param {boolean} [object.functions]
- * @param {boolean} [object.returnMap]
+ * @param {object} params
+ * @param {string} params.user
+ * @param {Record<string, Record<string, string>>} [object.userMCPAuthMap]
+ * @param {AbortSignal} [object.signal]
+ * @param {Pick<Agent, 'id' | 'provider' | 'model'>} [params.agent]
+ * @param {string} [params.model]
+ * @param {EModelEndpoint} [params.endpoint]
+ * @param {LoadToolOptions} [params.options]
+ * @param {boolean} [params.useSpecs]
+ * @param {Array<string>} params.tools
+ * @param {boolean} [params.functions]
+ * @param {boolean} [params.returnMap]
+ * @param {AppConfig['webSearch']} [params.webSearch]
+ * @param {AppConfig['fileStrategy']} [params.fileStrategy]
+ * @param {AppConfig['imageOutputType']} [params.imageOutputType]
  * @returns {Promise<{ loadedTools: Tool[], toolContextMap: Object<string, any> } | Record<string,Tool>>}
  */
 const loadTools = async ({
   user,
   agent,
   model,
+  signal,
   endpoint,
-  useSpecs,
+  userMCPAuthMap,
   tools = [],
   options = {},
   functions = true,
   returnMap = false,
+  webSearch,
+  fileStrategy,
+  imageOutputType,
 }) => {
   const toolConstructors = {
     flux: FluxAPI,
@@ -202,6 +210,8 @@ const loadTools = async ({
         ...authValues,
         isAgent: !!agent,
         req: options.req,
+        imageOutputType,
+        fileStrategy,
         imageFiles,
       });
     },
@@ -217,7 +227,7 @@ const loadTools = async ({
   const imageGenOptions = {
     isAgent: !!agent,
     req: options.req,
-    fileStrategy: options.fileStrategy,
+    fileStrategy,
     processFileURL: options.processFileURL,
     returnMetadata: options.returnMetadata,
     uploadImageBuffer: options.uploadImageBuffer,
@@ -232,8 +242,8 @@ const loadTools = async ({
 
   /** @type {Record<string, string>} */
   const toolContextMap = {};
-  const remainingTools = [];
-  const appTools = options.req?.app?.locals?.availableTools ?? {};
+  const cachedTools = (await getCachedTools({ userId: user, includeGlobal: true })) ?? {};
+  const requestedMCPTools = {};
 
   for (const tool of tools) {
     if (tool === Tools.execute_code) {
@@ -243,7 +253,13 @@ const loadTools = async ({
           authFields: [EnvVar.CODE_API_KEY],
         });
         const codeApiKey = authValues[EnvVar.CODE_API_KEY];
-        const { files, toolContext } = await primeCodeFiles(options, codeApiKey);
+        const { files, toolContext } = await primeCodeFiles(
+          {
+            ...options,
+            agentId: agent?.id,
+          },
+          codeApiKey,
+        );
         if (toolContext) {
           toolContextMap[tool] = toolContext;
         }
@@ -258,21 +274,72 @@ const loadTools = async ({
       continue;
     } else if (tool === Tools.file_search) {
       requestedTools[tool] = async () => {
-        const { files, toolContext } = await primeSearchFiles(options);
+        const { files, toolContext } = await primeSearchFiles({
+          ...options,
+          agentId: agent?.id,
+        });
         if (toolContext) {
           toolContextMap[tool] = toolContext;
         }
         return createFileSearchTool({ req: options.req, files, entity_id: agent?.id });
       };
       continue;
-    } else if (tool && appTools[tool] && mcpToolPattern.test(tool)) {
-      requestedTools[tool] = async () =>
+    } else if (tool === Tools.web_search) {
+      const result = await loadWebSearchAuth({
+        userId: user,
+        loadAuthValues,
+        webSearchConfig: webSearch,
+      });
+      const { onSearchResults, onGetHighlights } = options?.[Tools.web_search] ?? {};
+      requestedTools[tool] = async () => {
+        toolContextMap[tool] = `# \`${tool}\`:
+Current Date & Time: ${replaceSpecialVars({ text: '{{iso_datetime}}' })}
+1. **Execute immediately without preface** when using \`${tool}\`.
+2. **After the search, begin with a brief summary** that directly addresses the query without headers or explaining your process.
+3. **Structure your response clearly** using Markdown formatting (Level 2 headers for sections, lists for multiple points, tables for comparisons).
+4. **Cite sources properly** according to the citation anchor format, utilizing group anchors when appropriate.
+5. **Tailor your approach to the query type** (academic, news, coding, etc.) while maintaining an expert, journalistic, unbiased tone.
+6. **Provide comprehensive information** with specific details, examples, and as much relevant context as possible from search results.
+7. **Avoid moralizing language.**
+`.trim();
+        return createSearchTool({
+          ...result.authResult,
+          onSearchResults,
+          onGetHighlights,
+          logger,
+        });
+      };
+      continue;
+    } else if (tool && cachedTools && mcpToolPattern.test(tool)) {
+      const [toolName, serverName] = tool.split(Constants.mcp_delimiter);
+      if (toolName === Constants.mcp_all) {
+        const currentMCPGenerator = async (index) =>
+          createMCPTools({
+            req: options.req,
+            res: options.res,
+            index,
+            serverName,
+            userMCPAuthMap,
+            model: agent?.model ?? model,
+            provider: agent?.provider ?? endpoint,
+            signal,
+          });
+        requestedMCPTools[serverName] = [currentMCPGenerator];
+        continue;
+      }
+      const currentMCPGenerator = async (index) =>
         createMCPTool({
+          index,
           req: options.req,
+          res: options.res,
           toolKey: tool,
+          userMCPAuthMap,
           model: agent?.model ?? model,
           provider: agent?.provider ?? endpoint,
+          signal,
         });
+      requestedMCPTools[serverName] = requestedMCPTools[serverName] || [];
+      requestedMCPTools[serverName].push(currentMCPGenerator);
       continue;
     }
 
@@ -291,30 +358,6 @@ const loadTools = async ({
       );
       requestedTools[tool] = toolInstance;
       continue;
-    }
-
-    if (functions === true) {
-      remainingTools.push(tool);
-    }
-  }
-
-  let specs = null;
-  if (useSpecs === true && functions === true && remainingTools.length > 0) {
-    specs = await loadSpecs({
-      llm: model,
-      user,
-      message: options.message,
-      memory: options.memory,
-      signal: options.signal,
-      tools: remainingTools,
-      map: true,
-      verbose: false,
-    });
-  }
-
-  for (const tool of remainingTools) {
-    if (specs && specs[tool]) {
-      requestedTools[tool] = specs[tool];
     }
   }
 
@@ -336,6 +379,34 @@ const loadTools = async ({
   }
 
   const loadedTools = (await Promise.all(toolPromises)).flatMap((plugin) => plugin || []);
+  const mcpToolPromises = [];
+  /** MCP server tools are initialized sequentially by server */
+  let index = -1;
+  for (const [serverName, generators] of Object.entries(requestedMCPTools)) {
+    index++;
+    for (const generator of generators) {
+      try {
+        if (generator && generators.length === 1) {
+          mcpToolPromises.push(
+            generator(index).catch((error) => {
+              logger.error(`Error loading ${serverName} tools:`, error);
+              return null;
+            }),
+          );
+          continue;
+        }
+        const mcpTool = await generator(index);
+        if (Array.isArray(mcpTool)) {
+          loadedTools.push(...mcpTool);
+        } else if (mcpTool) {
+          loadedTools.push(mcpTool);
+        }
+      } catch (error) {
+        logger.error(`Error loading MCP tool for server ${serverName}:`, error);
+      }
+    }
+  }
+  loadedTools.push(...(await Promise.all(mcpToolPromises)).flatMap((plugin) => plugin || []));
   return { loadedTools, toolContextMap };
 };
 

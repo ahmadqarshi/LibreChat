@@ -1,4 +1,6 @@
 const { nanoid } = require('nanoid');
+const { sendEvent } = require('@librechat/api');
+const { logger } = require('@librechat/data-schemas');
 const { Tools, StepTypes, FileContext } = require('librechat-data-provider');
 const {
   EnvVar,
@@ -9,19 +11,10 @@ const {
   handleToolCalls,
   ChatModelStreamHandler,
 } = require('@librechat/agents');
+const { processFileCitations } = require('~/server/services/Files/Citations');
 const { processCodeOutput } = require('~/server/services/Files/Code/process');
 const { loadAuthValues } = require('~/server/services/Tools/credentials');
 const { saveBase64Image } = require('~/server/services/Files/process');
-const { logger, sendEvent } = require('~/config');
-
-/** @typedef {import('@librechat/agents').Graph} Graph */
-/** @typedef {import('@librechat/agents').EventHandler} EventHandler */
-/** @typedef {import('@librechat/agents').ModelEndData} ModelEndData */
-/** @typedef {import('@librechat/agents').ToolEndData} ToolEndData */
-/** @typedef {import('@librechat/agents').ToolEndCallback} ToolEndCallback */
-/** @typedef {import('@librechat/agents').ChatModelStreamHandler} ChatModelStreamHandler */
-/** @typedef {import('@librechat/agents').ContentAggregatorResult['aggregateContent']} ContentAggregator */
-/** @typedef {import('@librechat/agents').GraphEvents} GraphEvents */
 
 class ModelEndHandler {
   /**
@@ -38,7 +31,7 @@ class ModelEndHandler {
    * @param {string} event
    * @param {ModelEndData | undefined} data
    * @param {Record<string, unknown> | undefined} metadata
-   * @param {Graph} graph
+   * @param {StandardGraph} graph
    * @returns
    */
   handle(event, data, metadata, graph) {
@@ -244,6 +237,54 @@ function createToolEndCallback({ req, res, artifactPromises }) {
 
     if (!output.artifact) {
       return;
+    }
+
+    if (output.artifact[Tools.file_search]) {
+      artifactPromises.push(
+        (async () => {
+          const user = req.user;
+          const attachment = await processFileCitations({
+            user,
+            metadata,
+            appConfig: req.config,
+            toolArtifact: output.artifact,
+            toolCallId: output.tool_call_id,
+          });
+          if (!attachment) {
+            return null;
+          }
+          if (!res.headersSent) {
+            return attachment;
+          }
+          res.write(`event: attachment\ndata: ${JSON.stringify(attachment)}\n\n`);
+          return attachment;
+        })().catch((error) => {
+          logger.error('Error processing file citations:', error);
+          return null;
+        }),
+      );
+    }
+
+    if (output.artifact[Tools.web_search]) {
+      artifactPromises.push(
+        (async () => {
+          const attachment = {
+            type: Tools.web_search,
+            messageId: metadata.run_id,
+            toolCallId: output.tool_call_id,
+            conversationId: metadata.thread_id,
+            [Tools.web_search]: { ...output.artifact[Tools.web_search] },
+          };
+          if (!res.headersSent) {
+            return attachment;
+          }
+          res.write(`event: attachment\ndata: ${JSON.stringify(attachment)}\n\n`);
+          return attachment;
+        })().catch((error) => {
+          logger.error('Error processing artifact content:', error);
+          return null;
+        }),
+      );
     }
 
     if (output.artifact.content) {
