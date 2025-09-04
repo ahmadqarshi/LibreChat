@@ -26,7 +26,6 @@ const auth = require('./auth');
 const edit = require('./edit');
 const keys = require('./keys');
 const user = require('./user');
-const ask = require('./ask');
 const analytics = require('./analytics');
 const mcp = require('./mcp');
 

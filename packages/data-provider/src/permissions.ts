@@ -36,6 +36,7 @@ export enum PermissionTypes {
    * Type for Analytics
    */
   ANALYTICS = 'ANALYTICS',
+  /**
    * Type for using the "Web Search" feature
    */
   WEB_SEARCH = 'WEB_SEARCH',

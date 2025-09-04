@@ -51,8 +51,6 @@ const defaultRolesSchema = z.object({
       [PermissionTypes.BOOKMARKS]: bookmarkPermissionsSchema.extend({
         [Permissions.USE]: z.boolean().default(true),
       }),
-      [PermissionTypes.ANALYTICS]: analyticsPermissionsSchema.extend({
-        [Permissions.USE]: z.boolean().default(true),
       [PermissionTypes.MEMORIES]: memoryPermissionsSchema.extend({
         [Permissions.USE]: z.boolean().default(true),
         [Permissions.CREATE]: z.boolean().default(true),
@@ -73,6 +71,9 @@ const defaultRolesSchema = z.object({
         [Permissions.USE]: z.boolean().default(true),
       }),
       [PermissionTypes.RUN_CODE]: runCodePermissionsSchema.extend({
+        [Permissions.USE]: z.boolean().default(true),
+      }),
+      [PermissionTypes.ANALYTICS]: analyticsPermissionsSchema.extend({
         [Permissions.USE]: z.boolean().default(true),
       }),
       [PermissionTypes.WEB_SEARCH]: webSearchPermissionsSchema.extend({
@@ -133,7 +134,7 @@ export const roleDefaults = defaultRolesSchema.parse({
       [PermissionTypes.RUN_CODE]: {
         [Permissions.USE]: true,
       },
-      [PermissionTypes.ANALYTICS]: {
+      [PermissionTypes.ANALYTICS]: {},
       [PermissionTypes.WEB_SEARCH]: {
         [Permissions.USE]: true,
       },
@@ -163,8 +164,8 @@ export const roleDefaults = defaultRolesSchema.parse({
       [PermissionTypes.MULTI_CONVO]: {},
       [PermissionTypes.TEMPORARY_CHAT]: {},
       [PermissionTypes.RUN_CODE]: {},
-      [PermissionTypes.ANALYTICS]: {},
       [PermissionTypes.WEB_SEARCH]: {},
+      [PermissionTypes.ANALYTICS]: {},
       [PermissionTypes.PEOPLE_PICKER]: {
         [Permissions.VIEW_USERS]: false,
         [Permissions.VIEW_GROUPS]: false,

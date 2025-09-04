@@ -39,14 +39,16 @@ const buildQuery = (params: Record<string, unknown>): string => {
   return query ? `?${query}` : '';
 };
 
-export const health = () => '/health';
-export const user = () => '/api/user';
+export const health = () => `${BASE_URL}/health`;
+export const user = () => `${BASE_URL}/api/user`;
 
 export const balance = () => `${BASE_URL}/api/balance`;
 
 export const userPlugins = () => `${BASE_URL}/api/user/plugins`;
 
-export const deleteUser = () => '/api/user/delete';
+export const deleteUser = () => `${BASE_URL}/api/user/delete`;
+
+const messagesRoot = `${BASE_URL}/api/messages`;
 
 export const messages = (params: q.MessagesListParams) => {
   const { conversationId, messageId, ...rest } = params;
@@ -132,7 +134,7 @@ export const login = () => `${BASE_URL}/api/auth/login`;
 
 export const logout = () => `${BASE_URL}/api/auth/logout`;
 
-export const logout = () => '/api/auth/logout';
+export const register = () => `${BASE_URL}/api/auth/register`;
 
 export const loginFacebook = () => `${BASE_URL}/api/auth/facebook`;
 

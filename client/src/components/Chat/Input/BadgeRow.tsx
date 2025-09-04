@@ -365,7 +365,7 @@ function BadgeRow({
         {showEphemeralBadges === true && (
           <>
             <WebSearch />
-            <CodeInterpreter />
+            {/* <CodeInterpreter /> */}
             <FileSearch />
             <Artifacts />
             <MCPSelect conversationId={conversationId} />
