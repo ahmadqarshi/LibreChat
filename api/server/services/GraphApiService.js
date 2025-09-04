@@ -1,4 +1,5 @@
-const client = require('openid-client');
+// openid-client is ESM-only; load it dynamically when needed
+let openidClient = null;
 const { isEnabled } = require('@librechat/api');
 const { logger } = require('@librechat/data-schemas');
 const { CacheKeys } = require('librechat-data-provider');
@@ -61,6 +62,9 @@ const createGraphClient = async (accessToken, sub) => {
  */
 const exchangeTokenForGraphAccess = async (config, accessToken, sub) => {
   try {
+    if (!openidClient) {
+      openidClient = await import('openid-client');
+    }
     const tokensCache = getLogStores(CacheKeys.OPENID_EXCHANGED_TOKENS);
     const cacheKey = `${sub}:graph`;
 
@@ -75,7 +79,7 @@ const exchangeTokenForGraphAccess = async (config, accessToken, sub) => {
       .map((scope) => `https://graph.microsoft.com/${scope}`)
       .join(' ');
 
-    const grantResponse = await client.genericGrantRequest(
+    const grantResponse = await openidClient.genericGrantRequest(
       config,
       'urn:ietf:params:oauth:grant-type:jwt-bearer',
       {
@@ -490,7 +494,6 @@ const mapGroupToTPrincipalSearchResult = (group) => {
     idOnTheSource: group.id,
   };
 };
-
 /**
  * Map Graph API /me/people contact object to TPrincipalSearchResult format
  * Handles both user and group contacts from the people endpoint

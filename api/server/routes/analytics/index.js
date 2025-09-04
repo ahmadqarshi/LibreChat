@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const connectDb = require('~/lib/db/connectDb');
+const { connectDb } = require('~/db');
 const { checkAdmin, requireJwtAuth } = require('~/server/middleware');
 const { SystemRoles } = require('librechat-data-provider');
 const { Parser } = require('json2csv');

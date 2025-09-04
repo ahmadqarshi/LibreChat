@@ -1,4 +1,5 @@
-const { ObjectId } = require('mongodb');
+const mongoose = require('mongoose');
+const { ObjectId } = mongoose.Types;
 const { logger } = require('@librechat/data-schemas');
 const {
   Constants,

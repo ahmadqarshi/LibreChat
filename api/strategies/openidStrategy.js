@@ -1,12 +1,13 @@
 const undici = require('undici');
 const fetch = require('node-fetch');
 const passport = require('passport');
-const client = require('openid-client');
+// openid-client is ESM-only; load it dynamically when needed to avoid require() ESM error
+let client = null; // will be assigned via dynamic import in setupOpenId()
 const jwtDecode = require('jsonwebtoken/decode');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const { hashToken, logger } = require('@librechat/data-schemas');
 const { CacheKeys, ErrorTypes } = require('librechat-data-provider');
-const { Strategy: OpenIDStrategy } = require('openid-client/passport');
+// Strategy will be loaded dynamically from 'openid-client/passport' inside setupOpenId()
 const {
   isEnabled,
   logHeaders,
@@ -100,37 +101,6 @@ let openidConfig = null;
 //overload currenturl function because of express version 4 buggy req.host doesn't include port
 //More info https://github.com/panva/openid-client/pull/713
 
-class CustomOpenIDStrategy extends OpenIDStrategy {
-  currentUrl(req) {
-    const hostAndProtocol = process.env.DOMAIN_SERVER;
-    return new URL(`${hostAndProtocol}${req.originalUrl ?? req.url}`);
-  }
-
-  authorizationRequestParams(req, options) {
-    const params = super.authorizationRequestParams(req, options);
-    if (options?.state && !params.has('state')) {
-      params.set('state', options.state);
-    }
-
-    if (process.env.OPENID_AUDIENCE) {
-      params.set('audience', process.env.OPENID_AUDIENCE);
-      logger.debug(
-        `[openidStrategy] Adding audience to authorization request: ${process.env.OPENID_AUDIENCE}`,
-      );
-    }
-
-    /** Generate nonce for federated providers that require it */
-    const shouldGenerateNonce = isEnabled(process.env.OPENID_GENERATE_NONCE);
-    if (shouldGenerateNonce && !params.has('nonce') && this._sessionKey) {
-      const crypto = require('crypto');
-      const nonce = crypto.randomBytes(16).toString('hex');
-      params.set('nonce', nonce);
-      logger.debug('[openidStrategy] Generated nonce for federated provider:', nonce);
-    }
-
-    return params;
-  }
-}
 
 /**
  * Exchange the access token for a new access token using the on-behalf-of flow if required.
@@ -292,6 +262,12 @@ function convertToUsername(input, defaultValue = '') {
  */
 async function setupOpenId() {
   try {
+    // Dynamically import ESM-only modules when OpenID is actually being configured
+    if (!client) {
+      client = await import('openid-client');
+    }
+    const { Strategy: OpenIDStrategy } = await import('openid-client/passport');
+
     const shouldGenerateNonce = isEnabled(process.env.OPENID_GENERATE_NONCE);
 
     /** @type {ClientMetadata} */
@@ -327,6 +303,39 @@ async function setupOpenId() {
         ? 'OPENID_GENERATE_NONCE=true - Will generate nonce and use explicit metadata for federated providers'
         : 'OPENID_GENERATE_NONCE=false - Standard flow without explicit nonce or metadata',
     });
+
+    // Define the strategy class after OpenIDStrategy is available
+    class CustomOpenIDStrategy extends OpenIDStrategy {
+      currentUrl(req) {
+        const hostAndProtocol = process.env.DOMAIN_SERVER;
+        return new URL(`${hostAndProtocol}${req.originalUrl ?? req.url}`);
+      }
+
+      authorizationRequestParams(req, options) {
+        const params = super.authorizationRequestParams(req, options);
+        if (options?.state && !params.has('state')) {
+          params.set('state', options.state);
+        }
+
+        if (process.env.OPENID_AUDIENCE) {
+          params.set('audience', process.env.OPENID_AUDIENCE);
+          logger.debug(
+            `[openidStrategy] Adding audience to authorization request: ${process.env.OPENID_AUDIENCE}`,
+          );
+        }
+
+        /** Generate nonce for federated providers that require it */
+        const shouldGenerateNonce = isEnabled(process.env.OPENID_GENERATE_NONCE);
+        if (shouldGenerateNonce && !params.has('nonce') && this._sessionKey) {
+          const crypto = require('crypto');
+          const nonce = crypto.randomBytes(16).toString('hex');
+          params.set('nonce', nonce);
+          logger.debug('[openidStrategy] Generated nonce for federated provider:', nonce);
+        }
+
+        return params;
+      }
+    }
 
     const openidLogin = new CustomOpenIDStrategy(
       {

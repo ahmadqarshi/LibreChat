@@ -1,7 +1,7 @@
 // file deepcode ignore NoRateLimitingForLogin: Rate limiting is handled by the `loginLimiter` middleware
 const express = require('express');
 const passport = require('passport');
-const { randomState } = require('openid-client');
+const crypto = require('crypto');
 const { logger } = require('@librechat/data-schemas');
 const { ErrorTypes } = require('librechat-data-provider');
 const { isEnabled, createSetBalanceConfig } = require('@librechat/api');
@@ -110,6 +110,11 @@ router.get(
 /**
  * OpenID Routes
  */
+function randomState() {
+  // 32 hex chars (128-bit) is sufficient for CSRF state
+  return crypto.randomBytes(16).toString('hex');
+}
+
 router.get('/openid', (req, res, next) => {
   return passport.authenticate('openid', {
     session: false,

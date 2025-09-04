@@ -1,7 +1,7 @@
 // api/cache/keyvMongo.js
 const mongoose = require('mongoose');
 const EventEmitter = require('events');
-const { GridFSBucket } = require('mongodb');
+const { GridFSBucket } = mongoose.mongo;
 const { logger } = require('~/config');
 
 const storeMap = new Map();
